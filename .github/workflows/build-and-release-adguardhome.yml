@@ -1,0 +1,60 @@
+name: Build and Release AdGuardHome
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git
+
+      - name: Clone Lean's LEDE firmware
+        run: |
+          git clone https://github.com/lean/lede.git
+          cd lede
+
+      - name: Update feeds
+        run: |
+          cd lede
+          ./scripts/feeds update -a
+
+      - name: Clone AdGuardHome and LuCI app
+        run: |
+          cd lede/package
+          git clone https://github.com/AdguardTeam/AdGuardHome.git
+          git clone https://github.com/openwrt/luci.git
+
+      - name: Configure for IPQ60xx target
+        run: |
+          cd lede
+          make menuconfig  # You may want to customize this to .config for non-interactive
+
+      - name: Compile AdGuardHome package
+        run: |
+          cd lede
+          make package/adguardhome/{build,install}
+
+      - name: Compile LuCI app package
+        run: |
+          cd lede
+          make package/luci/{build,install}
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: 'v${{ github.run_id }}'
+          name: 'Release ${{ github.run_id }}'
+          body: 'Release generated on ${{ github.run_id }}'
+
+      - name: Upload .ipk files to release
+        uses: ncipollo/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset: './lede/bin/packages/*/*.ipk'
